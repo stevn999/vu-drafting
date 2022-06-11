@@ -25,7 +25,3 @@ I made this as a practice in using raycasts. I didn't even search for this nativ
 #### Why didn't you just edit the `fInitialDragCoeff` using `SetHandlingFloat`?
 
 See above.
-
-#### `SetAirDragMultiplierForPlayersVehicle` Doesn't do anything. Why is it still in the code?
-
-I am incredibly dumb.
