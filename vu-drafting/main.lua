@@ -2,85 +2,91 @@ local displayText = ''
 
 Citizen.CreateThread(function()
     local function shapetests(veh)
-        local int, hit, coords, normal, entity
-        hit = false
-        local testDistance = Config.DraftingMaxDistance
-        local vehCoords = GetEntityCoords(veh)
-        local vehVel = GetEntityVelocity(veh)
-        local draftPower = 0.0
-        local dir = GetOffsetFromEntityInWorldCoords(veh, 0, 0, 0.5)
-        local dir2 = vector3(dir.x + vehVel.x * testDistance, dir.y + vehVel.y * testDistance, dir.z + vehVel.z * testDistance)
-        local rayHandle = StartShapeTestCapsule(dir.x, dir.y, dir.z, dir2.x, dir2.y, dir2.z, 1.2, 2, veh, 2)
+        local int, hit, coords, normal, entity -- declare variables
+        hit = false -- set hit to false for later tests
+        local maxDistance = Config.DraftingMaxDistance
+        local playerVehicleCoords = GetEntityCoords(veh) -- get the vehicle coordinates
+        local playerVehicleVelocity = GetEntityVelocity(veh) -- get the vehicle velocity
+        local draftPower = 0.0 -- set the draft power to 0 for later tests
+        local dir = GetOffsetFromEntityInWorldCoords(veh, 0, 0, 0.5) -- A starting pint for the raycast
+        local dir2 = vector3(dir.x + playerVehicleVelocity.x * maxDistance, dir.y + playerVehicleVelocity.y * maxDistance, dir.z + playerVehicleVelocity.z * maxDistance) -- An ending point for the raycast
+        local rayHandle = StartShapeTestCapsule(dir.x, dir.y, dir.z, dir2.x, dir2.y, dir2.z, 1.2, 2, veh, 2) -- 1.2 is the radius of the ray
+        -- Wait for the shape test to be valid
         repeat
             int, hit, coords, normal, entity = GetShapeTestResult(rayHandle)
-            -- Wait(1)
         until int ~= 1
-        if hit == 1 then
-            -- displayText = int .. hit .. coords .. normal .. entity
-            -- DrawLine(dir.x, dir.y, dir.z, dir2.x, dir2.y, dir2.z, 255, 0, 0, 255)
-            -- local entityCoords = GetEntityCoords(entity)
-            local distance2 = #(coords - GetEntityCoords(veh))
-            local toDist = GetOffsetFromEntityInWorldCoords(veh, 0.0, distance2, 0.0)
-            -- DrawLine(coords.x, coords.y, coords.z, toDist.x, toDist.y, entityCoords.z, 255, 0, 0, 255)
-            -- DrawLine(vehCoords.x, vehCoords.y, vehCoords.z, toDist.x, toDist.y, entityCoords.z, 255, 0, 0, 255)
-            if #(coords - vehCoords) < testDistance then
-                draftPower = #(toDist - coords)
-                -- displayText = 'Drafting: '.. #(coords - vehCoords) ..'/'.. testDistance
+
+        if hit == 1 then -- If the raycast hit something
+            local distanceFromCenter = #(coords - GetEntityCoords(veh)) -- Get the distance between the vehicle and the hit point
+            local forwardPoint = GetOffsetFromEntityInWorldCoords(veh, 0.0, distanceFromCenter, 0.0) -- A point forward relative to the player's vehicle, and at the distance of the hit point
+
+            if Config.Debug then -- If debug mode is enabled draw debug lines
+                DrawLine(dir.x, dir.y, dir.z, dir2.x, dir2.y, dir2.z, 255, 0, 0, 255) -- Draw a red line from the starting point to the ending point
+                DrawLine(coords.x, coords.y, coords.z, forwardPoint.x, forwardPoint.y, entityCoords.z, 255, 0, 0, 255) -- Draw a red line from the hit point to the forward point
+                DrawLine(playerVehicleCoords.x, playerVehicleCoords.y, playerVehicleCoords.z, forwardPoint.x, forwardPoint.y, entityCoords.z, 255, 0, 0, 255) -- Draw a red line from the player vehicle to the forward point
+            end
+
+            if #(coords - playerVehicleCoords) < maxDistance then -- If the hit point is within the drafting distance
+                draftPower = #(forwardPoint - coords) -- Draft power is higher if the play's vehicle is better aligned with the draft entity
                 return int, hit, coords, normal, entity, draftPower
             end
-            entity = 0
+            entity = 0 -- No idea why this works, disables 'snipe drafting'
         end
-
         return int, hit, coords, normal, entity, draftPower
     end
 
     local playerPed = PlayerPedId()
     while true do
-        -- print(GetPlayerServerId(source))
-        Citizen.Wait(13)
-        -- position
-        if IsPedInAnyVehicle(playerPed, false) then
-            local veh = GetVehiclePedIsIn(playerPed, false)
-            local vehVel = GetEntityVelocity(veh)
-            local vehAbsVel = #GetEntityVelocity(veh)
-            local _, hit, _, _, entity, draftPower = shapetests(veh)
-            if entity ~= 0 and entity then
-                local otherVel = GetEntityVelocity(entity)
-                local relativeVel = otherVel - vehVel
-                if hit ~= 0 and #relativeVel < vehAbsVel / Config.DraftingMargin and vehAbsVel > (Config.MinDraftingSpeed / 2.23694) then
-                    local pow = 1 + ((40 / draftPower) or 0)
-                    if pow > 100 then pow = 100.0 end
-                    pow = Round(pow * 10) / 10
-                    -- displayText = 'Drafting power: ' .. pow .. '%'
-                    ModifyVehicleTopSpeed(veh, pow * Config.DraftingMultiplier)
-                    SetAirDragMultiplierForPlayersVehicle(playerPed, 0.0)
-                    -- SetVehicleCurrentRpm(veh, 1.1)
-                    Citizen.SetTimeout(1500, function()
-                        ModifyVehicleTopSpeed(veh, 0.0)
-                        SetAirDragMultiplierForPlayersVehicle(playerPed, 1.0)
-                        -- displayText = 'Drafting power: ' .. 0 .. '%'
+        Citizen.Wait(8)
+
+        if IsPedInAnyVehicle(playerPed, false) then -- If the player is in a vehicle
+            local veh = GetVehiclePedIsIn(playerPed, false) -- Get the vehicle the player is in
+            local vehVel = GetEntityVelocity(veh) -- Get the vehicle's velocity
+            local vehAbsVel = #GetEntityVelocity(veh) -- Get the absolute velocity of the vehicle
+            local _, hit, _, _, entity, draftPower = shapetests(veh) -- Get the results of the shape test
+
+            if entity ~= 0 and entity then -- If the shape test hit something
+                local hitVel = GetEntityVelocity(entity) -- Get the velocity of the hit entity
+                local relativeVel = hitVel - vehVel -- Get the relative velocity of the hit entity
+
+                if hit ~= 0 and #relativeVel < vehAbsVel / Config.DraftingMargin and vehAbsVel > (Config.MinDraftingSpeed / 2.23694) then -- If the vehicle is moving faster than the minimum drafting speed and the hit entity is moving faster than the drafting margin
+                    local pow = 1 + ((40 / draftPower) or 0) -- Calculate the draft power
+
+                    if pow > 100 then pow = 100.0 end -- Limit the draft power to 100%
+
+                    pow = Round(pow * 10) / 10 -- Round the draft power to one decimal place
+
+                    if Config.Debug then
+                        displayText = 'Drafting power: ' .. pow .. '%' -- Display the draft power
+                    end
+
+                    ModifyVehicleTopSpeed(veh, pow * Config.DraftingMultiplier) -- Modify the vehicle's top speed
+
+                    Citizen.SetTimeout(1500, function() -- Reset the vehicle's top speed after 1.5 seconds
+                        ModifyVehicleTopSpeed(veh, 0.0) -- Reset the vehicle's top speed
                     end)
-                else
-                    -- ModifyVehicleTopSpeed(veh, 0.0)
                 end
             end
         end
     end
 end)
--- Citizen.CreateThread(function()
---     while true do
---         Citizen.Wait(0)
---         SetTextFont(0)
---         SetTextProportional(2)
---         SetTextScale(0.0, 0.3)
---         SetTextColour(255, 255, 255, 255)
---         SetTextDropshadow(0, 0, 0, 0, 255)
---         SetTextEdge(2, 0, 0, 0, 2505)
---         SetTextDropShadow()
---         SetTextOutline()
---         SetTextEntry("STRING")
---         -- displayText = dump(#relativeVel) .. ', ' .. dump(#GetEntityVelocity(veh)) .. ', ' .. dump(coords)
---         AddTextComponentSubstringKeyboardDisplay(displayText)
---         DrawText(0.5, 0.5)
---     end
--- end)
+
+Citizen.CreateThread(function() -- Display thread
+    while true do
+        if Config.Debug then
+            DisplayHelpText(displayText)
+            Citizen.Wait(2)
+            SetTextFont(0)
+            SetTextProportional(2)
+            SetTextScale(0.0, 0.3)
+            SetTextColour(255, 255, 255, 255)
+            SetTextDropshadow(0, 0, 0, 0, 255)
+            SetTextEdge(2, 0, 0, 0, 2505)
+            SetTextDropShadow()
+            SetTextOutline()
+            SetTextEntry("STRING")
+            AddTextComponentSubstringKeyboardDisplay(displayText)
+            DrawText(0.5, 0.5)
+        end
+    end
+end)
