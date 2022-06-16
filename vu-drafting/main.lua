@@ -73,9 +73,9 @@ end)
 
 Citizen.CreateThread(function() -- Display thread
     while true do
+        Citizen.Wait(2)
         if Config.Debug then
             DisplayHelpText(displayText)
-            Citizen.Wait(2)
             SetTextFont(0)
             SetTextProportional(2)
             SetTextScale(0.0, 0.3)
